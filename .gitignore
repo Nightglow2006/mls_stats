@@ -1,9 +1,8 @@
-scrape/foo.py
-scrape/scratch.py
-scrape/test.py
-scrape/dbconnect.py
-scrape/connect.ini
-conn.ini
+demo/
 Scripts/
 Lib/
 .vscode/
+*conn.ini
+*match_data.json
+*pyvenv.cfg
+*.gitignore.bak
