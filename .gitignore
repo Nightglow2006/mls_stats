@@ -4,3 +4,6 @@ scrape\test.py
 scrape\dbconnect.py
 scrape\connect.ini
 conn.ini
+Scripts\
+Lib\
+.vscode\
