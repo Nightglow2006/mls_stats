@@ -3,3 +3,5 @@ scratch.py
 test.py
 dbconnect.py
 connect.ini
+__pycache__/
+Full_Sites/

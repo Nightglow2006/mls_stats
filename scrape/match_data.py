@@ -1,59 +1,164 @@
-import requests
-from requests.exceptions import RequestException
-from contextlib import closing
 from bs4 import BeautifulSoup as bs
-import dbconnect
-import pandas
+import pandas as pd
 from slimit import ast
 from slimit.parser import Parser
 from slimit.visitors import nodevisitor
 import json
+import datetime
+from http_get import simple_get as get
+from competitions import competitions as comp
+from seasons import seasons as sea
+from clubs import clubs
+from match_list import matches
 
-conn = dbconnect.connect()
+    
+# * Create pandas dataframe to store matches before DB insert
+matches_df = pd.DataFrame(columns= [
+    "match_extID",
+    "away_club_id",
+    "home_club_id",
+    "match_datetime",
+    "competition_id",
+    "season_id",
+    "mlssoccer_url"
+])
+lst = []
+for match in matches:
 
-def simple_get(url):
-    # Attempts to get the content at url' by making an HTTP GET request.
-    # If the content-type of response is some kind of HTML or XML, return the
-    # text content, otherwise return None.
+    rootURL = match
+    # * Perform HTTP Get request on rootURL
+    html = get.simple_get(rootURL)
+    
+    # * Use BeautifulSoup4 to parse the content of the site into an object,
+    # * And search that object for the appropriate javascript block
+    soup = bs(html, 'html.parser')
+    match = str(soup.find_all("script", type="text/javascript")[3].string)
+    
+    # * Use slimit to parse the javascript block into a tree,
+    # * traverse that tree, and store the result as JSON
+    tree = Parser().parse(match)
+    data = next(node.right for node in nodevisitor.visit(tree)
+               if (isinstance(node, ast.Assign) and
+                   node.left.to_ecma() == 'window.bootstrap'))
+    match_data = json.loads(data.to_ecma())
 
-    try:
-        with closing(requests.get(url, stream=True)) as resp:
-            if is_good_response(resp):
-                return resp.content
-            else:
-                return None
-    except RequestException as e:
-        log_error('Error during requests to {0} : {1}'.format(url, str(e)))
-        return None
+    # * Get data for `mls`.`matches`
+    match_url = rootURL
+    #match_extID = match_data['match']['optaId']
+    #match_away_club_id = match_data['match']['away']['optaId']
+    #match_home_club_id = match_data['match']['home']['optaId']
+    #match_datetime = datetime.datetime.fromtimestamp(
+    #    int(match_data['match']['matchTimeStamp']) / 1000
+    #).strftime('%Y-%m-%d %H:%M:%S')
+    #match_competition_id = match_data['match']['competition']['optaId']
+    
+    # * Get competition ID for `mls`.`matches` table
+    competition_abrv = match_data['match']['competition']['abbreviation']
+    competition_desc = match_data['match']['competition']['name']
+    competition_extID = match_data['match']['competition']['optaId']
+    competition_id = comp.get_competition_id(competition_extID = competition_extID, competition_abrv = competition_abrv, competition_desc = competition_desc)
+    
+    # * Get Season id for matches table as above for competitions
+    season_desc = match_data['match']['season']['name']
+    season_extID = match_data['match']['season']['optaId']
+    season_id = sea.get_season_id(season_extID = season_extID, season_desc = season_desc)
+    
+    # * Get id of home club for matches table as above for seasons
+    club_home_name = match_data['match']['home']['name']['full']
+    club_home_abrv = match_data['match']['home']['name']['abbreviation']
+    club_home_extID = match_data['match']['home']['optaId']
+    if len(match_data['match']['home']['colors']) >0:
+        club_home_bg_color = match_data['match']['home']['colors'][0]
+        club_home_accent_color_1 = None
+        club_home_accent_color_2 = None
+        club_home_txt_color = None
+    elif len(match_data['match']['home']['colors']) >1:
+        club_home_txt_color = match_data['match']['home']['colors'][-1]
+        club_home_bg_color = match_data['match']['home']['colors'][0]
+        club_home_accent_color_1 = None
+        club_home_accent_color_2 = None
+    elif len(match_data['match']['home']['colors']) >2:
+        club_home_accent_color_1 = match_data['match']['home']['colors'][1]
+        club_home_txt_color = match_data['match']['home']['colors'][-1]
+        club_home_bg_color = match_data['match']['home']['colors'][0]
+        club_home_accent_color_2 = None
+    elif len(match_data['match']['home']['colors']) == 4:
+        club_home_accent_color_2 = match_data['match']['home']['colors'][2]
+        club_home_accent_color_1 = match_data['match']['home']['colors'][1]
+        club_home_txt_color = match_data['match']['home']['colors'][-1]
+        club_home_bg_color = match_data['match']['home']['colors'][0]
+    else:
+        club_home_accent_color_2 = None
+        club_home_accent_color_1 = None
+        club_home_txt_color = None
+        club_home_bg_color = None
+    club_home_logo_url = str(match_data['match']['home']['logo']).replace("{{width}}x{{height}}","1024x1024")
+    
+    home_club_id = clubs.get_club_id(
+        club_name = club_home_name,
+        club_abrv = club_home_abrv,
+        club_extID = club_home_extID,
+        bg_color = club_home_bg_color,
+        accent_color_1 = club_home_accent_color_1,
+        accent_color_2 = club_home_accent_color_2,
+        txt_color = club_home_txt_color,
+        logo_url = club_home_logo_url
+    )
+    
+    # * Get id of away club for matches table as above for seasons
+    club_away_name = match_data['match']['away']['name']['full']
+    club_away_abrv = match_data['match']['away']['name']['abbreviation']
+    club_away_extID = match_data['match']['away']['optaId']
+    if len(match_data['match']['away']['colors']) >0:
+        club_away_bg_color = match_data['match']['away']['colors'][0]
+        club_away_accent_color_1 = None
+        club_away_accent_color_2 = None
+        club_away_txt_color = None
+    elif len(match_data['match']['away']['colors']) >1:
+        club_away_txt_color = match_data['match']['away']['colors'][-1]
+        club_away_bg_color = match_data['match']['away']['colors'][0]
+        club_away_accent_color_1 = None
+        club_away_accent_color_2 = None
+    elif len(match_data['match']['away']['colors']) >2:
+        club_away_accent_color_1 = match_data['match']['away']['colors'][1]
+        club_away_txt_color = match_data['match']['away']['colors'][-1]
+        club_away_bg_color = match_data['match']['away']['colors'][0]
+        club_away_accent_color_2 = None
+    elif len(match_data['match']['away']['colors']) == 4:
+        club_away_accent_color_2 = match_data['match']['away']['colors'][2]
+        club_away_accent_color_1 = match_data['match']['away']['colors'][1]
+        club_away_txt_color = match_data['match']['away']['colors'][-1]
+        club_away_bg_color = match_data['match']['away']['colors'][0]
+    else:
+        club_away_accent_color_2 = None
+        club_away_accent_color_1 = None
+        club_away_txt_color = None
+        club_away_bg_color = None
+    club_away_logo_url = str(match_data['match']['away']['logo']).replace("{{width}}x{{height}}","1024x1024")
+    
+    away_club_id = clubs.get_club_id(
+        club_name = club_away_name,
+        club_abrv = club_away_abrv,
+        club_extID = club_away_extID,
+        bg_color = club_away_bg_color,
+        accent_color_1 = club_away_accent_color_1,
+        accent_color_2 = club_away_accent_color_2,
+        txt_color = club_away_txt_color,
+        logo_url = club_away_logo_url
+    )
+    
+    match_dict = {
+        "match_extID": match_data['match']['optaId'],
+        "away_club_id": away_club_id,
+        "home_club_id": home_club_id,
+        "match_datetime": datetime.datetime.fromtimestamp(
+            int(match_data['match']['matchTimeStamp']) / 1000
+        ).strftime('%Y-%m-%d %H:%M:%S'),
+        "competition_id": competition_id,
+        "season_id": season_id,
+        "mlssoccer_url": rootURL
+    }
+    lst.append(match_dict)
 
-def is_good_response(resp):
-    content_type = resp.headers['Content-Type'].lower()
-    return (resp.status_code == 200
-            and content_type is not None
-            and content_type.find('html') > -1)
-
-def log_error(e):
-    print(e)
-
-rootURL = 'https://matchcenter.mlssoccer.com/matchcenter/2020-03-01-portland-timbers-vs-minnesota-united-fc/feed'
-#rootURL = 'file:///C:/Users/ebrig/Desktop/python/output1.html'
-html = simple_get(rootURL)
-
-soup = bs(html, 'html.parser')
-match = str(soup.find_all("script", type="text/javascript")[3].string)
-
-#print(type(bar.string), str(bar.string))
-tree = Parser().parse(match)
-
-obj = next(node.right for node in nodevisitor.visit(tree)
-           if (isinstance(node, ast.Assign) and
-               node.left.to_ecma() == 'window.bootstrap'))
-
-match_data = json.loads(obj.to_ecma())
-print(json.dumps(match_data, indent=4, sort_keys=True, ensure_ascii=False))
-
-with open('match_data.json', 'w') as outfile:
-    json.dump(match_data, fp=outfile, indent=4, sort_keys=True, ensure_ascii=True)
-
-#match_data = json.loads(obj.to_ecma())
-#print(match_data)
+matches_df = matches_df.append(lst, ignore_index=True).sort_values(by="match_datetime").reset_index(drop=True)
+print(matches_df)
