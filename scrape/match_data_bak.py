@@ -13,7 +13,6 @@ from clubs import clubs
 from match_list import matches
 import os
 
-clear = lambda: os.system('cls')
 
 # * QUERIES
 def upsert_match(match_extID, away_club_id, home_club_id,
@@ -69,9 +68,8 @@ matches_df = pd.DataFrame(columns= [
 ])
 lst = []
 for match in matches:
-    clear()
+
     rootURL = match
-    print(rootURL)
     # * Perform HTTP Get request on rootURL
     html = get.simple_get(rootURL)
     
@@ -223,6 +221,6 @@ for index, row in matches_df.iterrows():
         season_id=row['season_id'],
         mlssoccer_url=row['mlssoccer_url']
     )
-
+    clear = lambda: os.system('cls')
     clear()
     i += 1
