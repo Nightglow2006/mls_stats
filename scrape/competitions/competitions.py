@@ -4,6 +4,13 @@ from scrape import dbconnect
 def upsert_competition(competition_extID, competition_desc, competition_abrv):
     conn = dbconnect.connect()
     cur = conn.cursor()
+    if int(competition_extID) == 1097:
+        competition_desc = "MLS is Back Tournament Final Pres. by Wells Fargo"
+        competition_abrv = "MLS is Back"
+    if str(competition_desc) == "MLS Cup":
+        competition_extID = 99999
+        competition_desc = "MLS Playoffs"
+        competition_abrv = "MLS Playoffs"
     query = """
             INSERT INTO `mls`.`competitions` (
                 competition_extID,
