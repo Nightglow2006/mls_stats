@@ -1,4 +1,4 @@
-from scrape import dbconnect
+from scrape.connect import dbconnect
 
 
 def upsert_competition(competition_extID, competition_desc, competition_abrv):

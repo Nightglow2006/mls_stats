@@ -1,4 +1,4 @@
-from scrape import dbconnect
+from scrape.connect import dbconnect
 
 def upsert_club(club_name, club_abrv, 
                 club_extID, bg_color,

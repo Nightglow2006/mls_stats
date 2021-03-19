@@ -1,4 +1,4 @@
-from scrape import dbconnect
+from scrape.connect import dbconnect
 
 def upsert_season(season_extID, season_desc):
     conn = dbconnect.connect()

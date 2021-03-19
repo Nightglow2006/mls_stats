@@ -212,7 +212,8 @@ def get_players(roster, club_id):
             "display_name": player_display_name,
             "jersey_num": player_jersey_num,
             "roster_status": player_roster_status,
-            "player_url": player_url   
+            "player_url": player_url.lower().replace("https://www.mlssoccer","https://mlssoccer")
+            #str('https://www.mlssoccer.com/players/reto-ziegler').lower().replace("https://www.mlssoccer","https://mlssoccer")
         }
         df = df.append(player_dict, ignore_index=True)
     time.sleep(10)
