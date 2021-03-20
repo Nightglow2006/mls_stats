@@ -1,21 +1,15 @@
+from scrape.connect.dbconnect import connect
 import pandas as pd
 import datetime
-from scrape.connect import dbconnect
-from scrape.http_get import simple_get as get
 from scrape.competitions import competitions as comp
 from scrape.seasons import seasons as sea
 from scrape.clubs import clubs
-from scrape.matches.match_list import matches
-from scrape.matches.players import match_players
-from scrape.matches import match_data
 import os
-
-clear = lambda: os.system('cls')
 
 # * QUERIES
 def upsert_match(match_extID, away_club_id, home_club_id,
                  match_datetime, competition_id, season_id, mlssoccer_url):
-    conn = dbconnect.connect()
+    conn = connect()
     cur = conn.cursor()
     query = """
             INSERT INTO `mls`.`matches` (
@@ -54,38 +48,47 @@ def upsert_match(match_extID, away_club_id, home_club_id,
     conn.commit()
     conn.close()
 
-# * Create pandas dataframe to store matches before DB insert
-matches_df = pd.DataFrame(columns= [
-    "match_extID",
-    "away_club_id",
-    "home_club_id",
-    "match_datetime",
-    "competition_id",
-    "season_id",
-    "mlssoccer_url"
-])
-lst = []
-matches = ['https://matchcenter.mlssoccer.com/matchcenter/2020-03-07-atlanta-united-fc-vs-fc-cincinnati/feed']
-for match in matches:
-    clear()
-    rootURL = match
-    print(rootURL)
-    
-    match_data = match_data.get_match_data(rootURL)
+def get_match(match_extID):
+    conn = connect()
+    cur = conn.cursor()
+    query = """
+            SELECT `id`
+              FROM `mls`.`matches`
+             WHERE `match_extID` = %(match_extID)s
+            """
+    cur.execute(query, {"match_extID": match_extID})
+    match_id = cur.fetchone()
+    conn.close()
+    if match_id is None:
+        return match_id
+    else:
+        return match_id[0]
 
-    # * update players table from match_data
-    match_players.load_players(match_data = match_data)
+def upload_match (match_data, match_url):
+    print("Current Match: " + match_data['match']['away']['name']['full'] + ' at ' + match_data['match']['home']['name']['full'] + ', ' + datetime.datetime.fromtimestamp(int(match_data['match']['matchTimeStamp']) / 1000).strftime('%Y-%m-%d'))
+    # match_dict = {
+    #     "match_extID": match_data['match']['optaId'],
+    #     "away_club_id": away_club_id,
+    #     "home_club_id": home_club_id,
+    #     "match_datetime": datetime.datetime.fromtimestamp(
+    #         int(match_data['match']['matchTimeStamp']) / 1000
+    #     ).strftime('%Y-%m-%d %H:%M:%S'),
+    #     "competition_id": competition_id,
+    #     "season_id": season_id,
+    #     "mlssoccer_url": match_url
+    # }
 
-    # * Get data for `mls`.`matches`
-    match_url = rootURL
-    #match_extID = match_data['match']['optaId']
-    #match_away_club_id = match_data['match']['away']['optaId']
-    #match_home_club_id = match_data['match']['home']['optaId']
-    #match_datetime = datetime.datetime.fromtimestamp(
-    #    int(match_data['match']['matchTimeStamp']) / 1000
-    #).strftime('%Y-%m-%d %H:%M:%S')
-    #match_competition_id = match_data['match']['competition']['optaId']
-    
+    # * Create pandas dataframe to store matches before DB insert
+    match_df = pd.DataFrame(columns= [
+        "match_extID",
+        "away_club_id",
+        "home_club_id",
+        "match_datetime",
+        "competition_id",
+        "season_id",
+        "mlssoccer_url"
+    ])
+    lst = []
     # * Get competition ID for `mls`.`matches` table
     competition_abrv = match_data['match']['competition']['abbreviation']
     competition_desc = match_data['match']['competition']['name']
@@ -190,24 +193,19 @@ for match in matches:
         ).strftime('%Y-%m-%d %H:%M:%S'),
         "competition_id": competition_id,
         "season_id": season_id,
-        "mlssoccer_url": rootURL
+        "mlssoccer_url": match_url
     }
     lst.append(match_dict)
+    
+    match_df.append(lst, ignore_index=True).sort_values(by="match_datetime").reset_index(drop=True)
+    for index, row in match_df.iterrows():
+        upsert_match(
+            match_extID=row['match_extID'],
+            away_club_id=row['away_club_id'],
+            home_club_id=row['home_club_id'],
+            match_datetime=row['match_datetime'],
+            competition_id=row['competition_id'],
+            season_id=row['season_id'],
+            mlssoccer_url=row['mlssoccer_url']
+        )
 
-matches_df = matches_df.append(lst, ignore_index=True).sort_values(by="match_datetime").reset_index(drop=True)
-
-i = 1
-for index, row in matches_df.iterrows():
-    pct_complete = "{:.2%}".format(i / len(matches_df.index))
-    print("Inserting records... ", pct_complete, " complete...")
-    upsert_match(
-        match_extID=row['match_extID'],
-        away_club_id=row['away_club_id'],
-        home_club_id=row['home_club_id'],
-        match_datetime=row['match_datetime'],
-        competition_id=row['competition_id'],
-        season_id=row['season_id'],
-        mlssoccer_url=row['mlssoccer_url']
-    )
-    clear()
-    i += 1

@@ -96,5 +96,3 @@ def check_valid_state(state):
         return True
     else:
         return False
-
-# {v.lower(): k.upper() for k, v in abrv_states.items()}

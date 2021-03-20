@@ -3,15 +3,13 @@ from scrape.matches.players import get_players
 from scrape.geo_lookup import state_abrv
 import pandas as pd
 import os
-
-clear = lambda: os.system('cls')
-player_match_lst = []
-player_lineup_lst = []
-sides = ['home', 'away']
-lineup = ['bench', 'lineup']
-# rootURL = 'https://matchcenter.mlssoccer.com/matchcenter/2020-03-01-portland-timbers-vs-minnesota-united-fc/feed'
+from progress.bar import IncrementalBar
 
 def load_players(match_data):
+    player_match_lst = []
+    player_lineup_lst = []
+    sides = ['home', 'away']
+    lineup = ['bench', 'lineup']
     # * Define dataframes
     # * Dataframe for match_data['match'][<home / away>]['players']
     match_players_df = pd.DataFrame(columns = [
@@ -96,6 +94,8 @@ def load_players(match_data):
     # convert list of dicts to dataframe
     match_players_df = match_players_df.append(player_match_lst, ignore_index=True).set_index('player_extID').sort_values(by="player_extID")
     
+    bar = IncrementalBar('Importing Players', max=len(match_players_df), suffix='%(percent)d%%')
+    
     # for each of home and away
     for side in sides:
         # for each of bench / lineup
@@ -122,9 +122,9 @@ def load_players(match_data):
     players_df = match_players_df.join(
         other = lineup_players_df,
         how='inner').sort_values(by="player_extID").reset_index(drop=False)
-    
     # Upsert players into database
     for index, row in players_df.iterrows():
+        bar.next()
         get_players.upsert_match_player(
             player_extID = row['player_extID'],
             player_first_name = row['player_first_name'],
@@ -141,3 +141,4 @@ def load_players(match_data):
             player_headshot_url = row['player_headshot_url'],
             player_position = row['player_position'],
         )
+    bar.finish()
